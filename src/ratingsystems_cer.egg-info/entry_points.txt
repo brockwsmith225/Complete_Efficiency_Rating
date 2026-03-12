@@ -1,0 +1,3 @@
+[ratingsystems]
+predictor = ratingsystems.cer:CompleteEfficiencyRatingPredictor
+rating_system = ratingsystems.cer:CompleteEfficiencyRatingSystem
