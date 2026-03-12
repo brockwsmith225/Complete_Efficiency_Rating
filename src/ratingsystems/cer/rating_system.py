@@ -6,8 +6,7 @@ from ratingsystems import Rating, RatingSystem, Stat, TeamRating
 
 class CompleteEfficiencyRatingSystem(RatingSystem):
 
-    class Meta:
-        name: str = "cer"
+    name: str = "cer"
     
     def __init__(self, include_points: bool = False):
         self.include_points = include_points

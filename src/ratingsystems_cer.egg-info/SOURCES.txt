@@ -1,10 +1,4 @@
 pyproject.toml
-src/ratingsystems_cer.egg-info/PKG-INFO
-src/ratingsystems_cer.egg-info/SOURCES.txt
-src/ratingsystems_cer.egg-info/dependency_links.txt
-src/ratingsystems_cer.egg-info/entry_points.txt
-src/ratingsystems_cer.egg-info/requires.txt
-src/ratingsystems_cer.egg-info/top_level.txt
 src/ratingsystems/cer/__init__.py
 src/ratingsystems/cer/__main__.py
 src/ratingsystems/cer/predictor.py

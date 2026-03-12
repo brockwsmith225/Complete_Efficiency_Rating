@@ -6,8 +6,7 @@ from ratingsystems import Prediction, Predictor, Rating
 
 class CompleteEfficiencyRatingPredictor(Predictor):
 
-    class Meta:
-        name: str = "cer"
+    name: str = "cer"
 
     def predict(self, team: str, opponent: str) -> Prediction:
         team_two_point_shot_percentage = self._calculate_matchup_value(self.rating.offense._efficiency._shooting._two_pct, team, self.rating.defense._efficiency._shooting._two_pct, opponent)
