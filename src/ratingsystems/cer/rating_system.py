@@ -223,7 +223,7 @@ class CompleteEfficiencyRatingSystem(RatingSystem):
             defensive_efficiency = ((allowed_shooting_rating / (allowed_offensive_rebound_rating * -1 + 1) * (forced_turnovers_per_possession * -1 + 1) + allowed_free_throw_rating) * allowed_points_per_possession) ** 0.5 % "_efficiency"
         else:
             defensive_efficiency = (allowed_shooting_rating / (allowed_offensive_rebound_rating * -1 + 1) * (forced_turnovers_per_possession * -1 + 1) + allowed_free_throw_rating) % "_efficiency"
-        defensive_rating = (defensive_efficiency / defensive_efficiency.mean * global_avg_points) % "defense"
+        defensive_rating = ~(defensive_efficiency / defensive_efficiency.mean * global_avg_points) % "defense"
 
         tempo_rating = self._create_rating_from_stat(teams, "possessions", name="tempo", games=games)
 
