@@ -1,25 +1,69 @@
 import math
+import inspect
+from statistics import fmean, stdev
 from typing import Any, Optional
 
 from ratingsystems import Rating, RatingSystem, Stat, TeamRating
+from ratingsystems.core.util import FilterList
+from ratingsystems.core.util.math import linear_regression
+
+from ratingsystems.cer.football import FootballRatingSystem
+from ratingsystems.cer.model import Possession
 
 
 class CompleteEfficiencyRatingSystem(RatingSystem):
 
     name: str = "cer"
     
-    def __init__(self, include_points: bool = False, fundamentals: bool = False, best_game: bool = False, recency_bias: float = 0.0):
+    def __init__(
+        self,
+        include_points: bool = False,
+        fundamentals: bool = False,
+        best_game: bool = False,
+        recency_bias: Optional[float] = None, # CBB: about 1 is what the data shows (by points scored, a more recent game is about 1% better than the next most recent game at predicting an outcome)
+        location_bias: Optional[float] = None, # CBB: about 2 is what the data shows (by points scored, home teams outscore equally matched away teams by about 3.5 points)
+        competitive_bias: Optional[float] = None,
+    ):
         self.include_points = include_points
         self.fundamentals = fundamentals
         self.best_game = best_game
-        self.recency_bias = recency_bias
 
-    def rate(self, games: list, seed: Rating = None) -> Rating:
+        options = {}
+
+        if recency_bias is not None:
+            self.recency_bias = recency_bias
+            options["recency_bias"] = recency_bias
+        else:
+            self.recency_bias = 0.0
+
+        if location_bias is not None:
+            self.location_bias = location_bias
+            options["location_bias"] = location_bias
+        else:
+            self.location_bias = 0.0
+
+        if competitive_bias is not None:
+            self.competitive_bias = competitive_bias
+            options["competitive_bias"] = competitive_bias
+        else:
+            self.competitive_bias = 0.0
+
+        self.football = FootballRatingSystem(**options)
+
+    def rate(self, games: list) -> Rating:
+        return self.football.rate(games)
+
         if seed is not None:
             seed = Rating.minmax_normalize(seed)
 
         teams = {}
         for game in games:
+            if game.neutral_site:
+                home_factor = 1.0
+                away_factor = 1.0
+            else:
+                home_factor = 1 - self.location_bias / 100
+                away_factor = 1 + self.location_bias / 100
             if game.home_team not in teams:
                 teams[game.home_team] = {
                     "opponents": [],
@@ -78,31 +122,31 @@ class CompleteEfficiencyRatingSystem(RatingSystem):
                 }
             if game.home_stats.field_goals_attempted:
                 teams[game.home_team]["opponents"].append(game.away_team)
-                teams[game.home_team]["points"].append(game.home_points)
+                teams[game.home_team]["points"].append(game.home_points * home_factor)
                 teams[game.home_team]["two_point_shot_selection"].append(game.home_stats.two_point_field_goals_attempted / game.home_stats.field_goals_attempted)
                 teams[game.home_team]["three_point_shot_selection"].append(game.home_stats.three_point_field_goals_attempted / game.home_stats.field_goals_attempted)
                 if not self.fundamentals:
-                    teams[game.home_team]["two_point_shot_percentage"].append(game.home_stats.two_point_field_goals_pct / 100.0)
-                    teams[game.home_team]["three_point_shot_percentage"].append(game.home_stats.three_point_field_goals_pct / 100.0)
-                    teams[game.home_team]["field_goal_shot_percentage"].append(game.home_stats.field_goals_pct / 100.0)
+                    teams[game.home_team]["two_point_shot_percentage"].append(game.home_stats.two_point_field_goals_pct / 100.0 * home_factor)
+                    teams[game.home_team]["three_point_shot_percentage"].append(game.home_stats.three_point_field_goals_pct / 100.0 * home_factor)
+                    teams[game.home_team]["field_goal_shot_percentage"].append(game.home_stats.field_goals_pct / 100.0 * home_factor)
                 else:
                     teams[game.home_team]["two_point_shot_percentage"].append(0.5)
                     teams[game.home_team]["three_point_shot_percentage"].append(0.4)
                     teams[game.home_team]["field_goal_shot_percentage"].append(0.45)
-                teams[game.home_team]["offensive_rebounds_percentage"].append(game.home_stats.offensive_rebounds / (game.home_stats.offensive_rebounds + game.away_stats.defensive_rebounds))
-                teams[game.home_team]["free_throws_shot_percentage"].append(game.home_stats.free_throws_pct / 100.0)
-                teams[game.home_team]["two_point_shot_selection_allowed"].append(game.away_stats.two_point_field_goals_attempted / game.away_stats.field_goals_attempted)
-                teams[game.home_team]["three_point_shot_selection_allowed"].append(game.away_stats.three_point_field_goals_attempted / game.away_stats.field_goals_attempted)
+                teams[game.home_team]["offensive_rebounds_percentage"].append(game.home_stats.offensive_rebounds / (game.home_stats.offensive_rebounds + game.away_stats.defensive_rebounds) * home_factor)
+                teams[game.home_team]["free_throws_shot_percentage"].append(game.home_stats.free_throws_pct / 100.0 * home_factor)
+                teams[game.home_team]["two_point_shot_selection_allowed"].append(game.away_stats.two_point_field_goals_attempted / game.away_stats.field_goals_attempted / home_factor)
+                teams[game.home_team]["three_point_shot_selection_allowed"].append(game.away_stats.three_point_field_goals_attempted / game.away_stats.field_goals_attempted / home_factor)
                 if not self.fundamentals:
-                    teams[game.home_team]["two_point_shot_percentage_allowed"].append(game.away_stats.two_point_field_goals_pct / 100.0)
-                    teams[game.home_team]["three_point_shot_percentage_allowed"].append(game.away_stats.three_point_field_goals_pct / 100.0)
-                    teams[game.home_team]["field_goal_shot_percentage_allowed"].append(game.away_stats.field_goals_pct / 100.0)
+                    teams[game.home_team]["two_point_shot_percentage_allowed"].append(game.away_stats.two_point_field_goals_pct / 100.0 / home_factor)
+                    teams[game.home_team]["three_point_shot_percentage_allowed"].append(game.away_stats.three_point_field_goals_pct / 100.0 / home_factor)
+                    teams[game.home_team]["field_goal_shot_percentage_allowed"].append(game.away_stats.field_goals_pct / 100.0 / home_factor)
                 else:
                     teams[game.home_team]["two_point_shot_percentage_allowed"].append(0.5)
                     teams[game.home_team]["three_point_shot_percentage_allowed"].append(0.4)
                     teams[game.home_team]["field_goal_shot_percentage_allowed"].append(0.45)
-                teams[game.home_team]["offensive_rebounds_percentage_allowed"].append(game.away_stats.offensive_rebounds / (game.away_stats.offensive_rebounds + game.home_stats.defensive_rebounds))
-                teams[game.home_team]["free_throws_shot_percentage_allowed"].append(game.away_stats.free_throws_pct / 100.0)
+                teams[game.home_team]["offensive_rebounds_percentage_allowed"].append(game.away_stats.offensive_rebounds / (game.away_stats.offensive_rebounds + game.home_stats.defensive_rebounds) / home_factor)
+                teams[game.home_team]["free_throws_shot_percentage_allowed"].append(game.away_stats.free_throws_pct / 100.0 / home_factor)
                 if game.home_stats.possessions:
                     team_possesions = game.home_stats.possessions
                     opponent_possessions = game.away_stats.possessions
@@ -111,41 +155,41 @@ class CompleteEfficiencyRatingSystem(RatingSystem):
                     team_possesions = game.home_stats.field_goals_attempted - game.home_stats.offensive_rebounds + game.home_stats.turnovers + 0.4 * game.home_stats.free_throws_attempted
                     opponent_possessions = game.away_stats.field_goals_attempted - game.away_stats.offensive_rebounds + game.away_stats.turnovers + 0.4 * game.away_stats.free_throws_attempted
                 teams[game.home_team]["possessions"].append(team_possesions)
-                teams[game.home_team]["points_per_possession"].append(game.home_points / team_possesions)
-                teams[game.home_team]["turnovers_per_possession"].append(game.home_stats.turnovers / team_possesions)
-                teams[game.home_team]["free_throws_per_possession"].append(game.home_stats.free_throws_attempted / team_possesions)
+                teams[game.home_team]["points_per_possession"].append(game.home_points / team_possesions * home_factor)
+                teams[game.home_team]["turnovers_per_possession"].append(game.home_stats.turnovers / team_possesions / home_factor)
+                teams[game.home_team]["free_throws_per_possession"].append(game.home_stats.free_throws_attempted / team_possesions * home_factor)
                 teams[game.home_team]["possessions_allowed"].append(opponent_possessions)
-                teams[game.home_team]["points_per_possession_allowed"].append(game.away_points / opponent_possessions)
-                teams[game.home_team]["turnovers_per_possession_allowed"].append(game.away_stats.turnovers / opponent_possessions)
-                teams[game.home_team]["free_throws_per_possession_allowed"].append(game.away_stats.free_throws_attempted / opponent_possessions)
+                teams[game.home_team]["points_per_possession_allowed"].append(game.away_points / opponent_possessions / home_factor)
+                teams[game.home_team]["turnovers_per_possession_allowed"].append(game.away_stats.turnovers / opponent_possessions * home_factor)
+                teams[game.home_team]["free_throws_per_possession_allowed"].append(game.away_stats.free_throws_attempted / opponent_possessions / home_factor)
                 teams[game.home_team]["recency"].append((1 + self.recency_bias / 100) ** len(teams[game.home_team]["opponents"]))
             if game.away_stats.field_goals_attempted:
                 teams[game.away_team]["opponents"].append(game.home_team)
-                teams[game.away_team]["points"].append(game.away_points)
+                teams[game.away_team]["points"].append(game.away_points * away_factor)
                 teams[game.away_team]["two_point_shot_selection"].append(game.away_stats.two_point_field_goals_attempted / game.away_stats.field_goals_attempted)
                 teams[game.away_team]["three_point_shot_selection"].append(game.away_stats.three_point_field_goals_attempted / game.away_stats.field_goals_attempted)
                 if not self.fundamentals:
-                    teams[game.away_team]["two_point_shot_percentage"].append(game.away_stats.two_point_field_goals_pct / 100.0)
-                    teams[game.away_team]["three_point_shot_percentage"].append(game.away_stats.three_point_field_goals_pct / 100.0)
+                    teams[game.away_team]["two_point_shot_percentage"].append(game.away_stats.two_point_field_goals_pct / 100.0 * away_factor)
+                    teams[game.away_team]["three_point_shot_percentage"].append(game.away_stats.three_point_field_goals_pct / 100.0 * away_factor)
                     teams[game.away_team]["field_goal_shot_percentage"].append(game.away_stats.field_goals_pct / 100.0)
                 else:
                     teams[game.away_team]["two_point_shot_percentage"].append(0.5)
                     teams[game.away_team]["three_point_shot_percentage"].append(0.4)
                     teams[game.away_team]["field_goal_shot_percentage"].append(0.45)
-                teams[game.away_team]["offensive_rebounds_percentage"].append(game.away_stats.offensive_rebounds / (game.away_stats.offensive_rebounds + game.home_stats.defensive_rebounds))
-                teams[game.away_team]["free_throws_shot_percentage"].append(game.away_stats.free_throws_pct / 100.0)
-                teams[game.away_team]["two_point_shot_selection_allowed"].append(game.home_stats.two_point_field_goals_attempted / game.home_stats.field_goals_attempted)
-                teams[game.away_team]["three_point_shot_selection_allowed"].append(game.home_stats.three_point_field_goals_attempted / game.home_stats.field_goals_attempted)
+                teams[game.away_team]["offensive_rebounds_percentage"].append(game.away_stats.offensive_rebounds / (game.away_stats.offensive_rebounds + game.home_stats.defensive_rebounds) * away_factor)
+                teams[game.away_team]["free_throws_shot_percentage"].append(game.away_stats.free_throws_pct / 100.0 * away_factor)
+                teams[game.away_team]["two_point_shot_selection_allowed"].append(game.home_stats.two_point_field_goals_attempted / game.home_stats.field_goals_attempted / away_factor)
+                teams[game.away_team]["three_point_shot_selection_allowed"].append(game.home_stats.three_point_field_goals_attempted / game.home_stats.field_goals_attempted / away_factor)
                 if not self.fundamentals:
-                    teams[game.away_team]["two_point_shot_percentage_allowed"].append(game.home_stats.two_point_field_goals_pct / 100.0)
-                    teams[game.away_team]["three_point_shot_percentage_allowed"].append(game.home_stats.three_point_field_goals_pct / 100.0)
-                    teams[game.away_team]["field_goal_shot_percentage_allowed"].append(game.home_stats.field_goals_pct / 100.0)
+                    teams[game.away_team]["two_point_shot_percentage_allowed"].append(game.home_stats.two_point_field_goals_pct / 100.0 / away_factor)
+                    teams[game.away_team]["three_point_shot_percentage_allowed"].append(game.home_stats.three_point_field_goals_pct / 100.0 / away_factor)
+                    teams[game.away_team]["field_goal_shot_percentage_allowed"].append(game.home_stats.field_goals_pct / 100.0 / away_factor)
                 else:
                     teams[game.away_team]["two_point_shot_percentage_allowed"].append(0.5)
                     teams[game.away_team]["three_point_shot_percentage_allowed"].append(0.4)
                     teams[game.away_team]["field_goal_shot_percentage_allowed"].append(0.45)
-                teams[game.away_team]["offensive_rebounds_percentage_allowed"].append(game.home_stats.offensive_rebounds / (game.home_stats.offensive_rebounds + game.away_stats.defensive_rebounds))
-                teams[game.away_team]["free_throws_shot_percentage_allowed"].append(game.home_stats.free_throws_pct / 100.0)
+                teams[game.away_team]["offensive_rebounds_percentage_allowed"].append(game.home_stats.offensive_rebounds / (game.home_stats.offensive_rebounds + game.away_stats.defensive_rebounds) / away_factor)
+                teams[game.away_team]["free_throws_shot_percentage_allowed"].append(game.home_stats.free_throws_pct / 100.0 / away_factor)
                 if game.away_stats.possessions:
                     team_possesions = game.away_stats.possessions
                     opponent_possessions = game.home_stats.possessions
@@ -154,13 +198,13 @@ class CompleteEfficiencyRatingSystem(RatingSystem):
                     team_possesions = game.away_stats.field_goals_attempted - game.away_stats.offensive_rebounds + game.away_stats.turnovers + 0.4 * game.away_stats.free_throws_attempted
                     opponent_possessions = game.home_stats.field_goals_attempted - game.home_stats.offensive_rebounds + game.home_stats.turnovers + 0.4 * game.home_stats.free_throws_attempted
                 teams[game.away_team]["possessions"].append(team_possesions)
-                teams[game.away_team]["points_per_possession"].append(game.away_points / team_possesions)
-                teams[game.away_team]["turnovers_per_possession"].append(game.away_stats.turnovers / team_possesions)
-                teams[game.away_team]["free_throws_per_possession"].append(game.away_stats.free_throws_attempted / team_possesions)
+                teams[game.away_team]["points_per_possession"].append(game.away_points / team_possesions * away_factor)
+                teams[game.away_team]["turnovers_per_possession"].append(game.away_stats.turnovers / team_possesions / away_factor)
+                teams[game.away_team]["free_throws_per_possession"].append(game.away_stats.free_throws_attempted / team_possesions * away_factor)
                 teams[game.away_team]["possessions_allowed"].append(opponent_possessions)
-                teams[game.away_team]["points_per_possession_allowed"].append(game.home_points / opponent_possessions)
-                teams[game.away_team]["turnovers_per_possession_allowed"].append(game.home_stats.turnovers / opponent_possessions)
-                teams[game.away_team]["free_throws_per_possession_allowed"].append(game.home_stats.free_throws_attempted / opponent_possessions)
+                teams[game.away_team]["points_per_possession_allowed"].append(game.home_points / opponent_possessions / away_factor)
+                teams[game.away_team]["turnovers_per_possession_allowed"].append(game.home_stats.turnovers / opponent_possessions * away_factor)
+                teams[game.away_team]["free_throws_per_possession_allowed"].append(game.home_stats.free_throws_attempted / opponent_possessions / away_factor)
                 teams[game.away_team]["recency"].append((1 + self.recency_bias / 100) ** len(teams[game.away_team]["opponents"]))
 
         # Calculate season averages for each stat for each team

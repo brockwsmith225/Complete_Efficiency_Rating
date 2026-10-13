@@ -1,4 +1,4 @@
-from ratingsystems.common.model.stat import Stat
+from ratingsystems.core.model.stat import Stat
 
 class Efficiency(Stat):
 

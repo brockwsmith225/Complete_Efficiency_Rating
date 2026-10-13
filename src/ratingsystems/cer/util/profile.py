@@ -21,6 +21,8 @@ class ProfileStats:
 
     @property
     def average(self) -> float:
+        if self.count == 0:
+            return None
         return self.total / self.count
 
     def __str__(self) -> str:
@@ -32,10 +34,14 @@ class ProfileStats:
 
 class Profiler():
 
-    def __init__(self):
+    def __init__(self, active: bool = False):
+        self.active = active
         self.functions = {}
 
     def __call__(self, function):
+        if not self.active:
+            return function
+
         self.functions[function] = ProfileStats()
         @functools.wraps(function)
         def wrapper(*args, **kwargs):
@@ -48,6 +54,7 @@ class Profiler():
 
     def stats(self):
         for function, stats in self.functions.items():
+            print()
             print(function)
             print(stats)
 
@@ -56,4 +63,4 @@ class Profiler():
             self.functions[function] = ProfileStats()
 
 
-profile = Profiler()
+profile = Profiler(active=True)

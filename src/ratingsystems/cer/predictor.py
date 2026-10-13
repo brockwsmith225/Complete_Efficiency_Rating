@@ -3,6 +3,8 @@ import scipy.stats as st
 
 from ratingsystems import Prediction, Predictor, Rating
 
+from ratingsystems.cer.football import FootballPredictor
+
 
 class CompleteEfficiencyRatingPredictor(Predictor):
 
@@ -13,7 +15,10 @@ class CompleteEfficiencyRatingPredictor(Predictor):
             rating = rating.cer
         super().__init__(rating)
 
+        self.football = FootballPredictor(rating)
+
     def predict(self, team: str, opponent: str) -> Prediction:
+        return self.football.predict(team, opponent)
         team_two_point_shot_percentage = self._calculate_matchup_value(self.rating.offense._efficiency._exp_points._two_pct, team, self.rating.defense._efficiency._exp_points._two_pct, opponent)
         team_two_point_shot_selection = self._calculate_matchup_value(self.rating.offense._efficiency._exp_points._two_sel, team, self.rating.defense._efficiency._exp_points._two_sel, opponent)
         team_three_point_shot_percentage = self._calculate_matchup_value(self.rating.offense._efficiency._exp_points._three_pct, team, self.rating.defense._efficiency._exp_points._three_pct, opponent)

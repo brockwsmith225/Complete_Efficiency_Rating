@@ -1,3 +1,4 @@
+import random
 from typing import Any, Callable, Self
 
 from ratingsystems.cer.util.profile import profile
@@ -5,18 +6,25 @@ from ratingsystems.cer.util.profile import profile
 
 class ProbabilitySpace:
 
-    def __init__(self, probabilities: dict[Any, float] = {}):
-        # TODO: verify result is not different with deepcopy
-        self._probabilities = probabilities.copy()
+    def __init__(self, probabilities: dict[Any, float] = None):
+        if probabilities is not None:
+            self._probabilities = probabilities
+        else:
+            self._probabilities = {}
 
     def get(self, event) -> float:
         return self._probabilities.get(event, 0.0)
 
+    @profile
     def probability(self, predicate) -> float:
         if isinstance(predicate, Callable):
             return sum([probability for event, probability in self._probabilities.items() if predicate(event)])
         else:
             return self.get(predicate)
+
+    @profile
+    def total(self) -> float:
+        return sum([p for p in self._probabilities.values()])
 
     def add(self, probability, event):
         if event not in self._probabilities:
@@ -29,12 +37,22 @@ class ProbabilitySpace:
             del self._probabilities[event]
 
     def events(self):
-        for event in self._probabilities.keys():
-            yield event
+        return self._probabilities.keys()
 
+    @profile
     def normalize(self, value: float = 1.0):
         total_probability = sum(self._probabilities.values())
         self._probabilities = {event: probability / total_probability * value for event, probability in self._probabilities.items()}
+
+    def select(self) -> Any:
+        return random.choices(
+            list(self._probabilities.keys()),
+            weights=list(self._probabilities.values()),
+            k=1,
+        )[0]
+
+    def copy(self) -> Self:
+        return ProbabilitySpace(self._probabilities)
 
     def __str__(self) -> str:
         return f"ProbabilitySpace({str(self._probabilities)})"
@@ -43,8 +61,9 @@ class ProbabilitySpace:
         return str(self)
 
     def __iter__(self):
-        for event, probability in self._probabilities.items():
-            yield probability, event
+        # for event, probability in self._probabilities.items():
+        #     yield probability, event
+        return [(probability, event) for event, probability in self._probabilities.items()].__iter__()
 
     def __len__(self):
         return len(self._probabilities)
@@ -52,32 +71,17 @@ class ProbabilitySpace:
     @profile
     def __add__(self, other: Any) -> Self:
         if isinstance(other, ProbabilitySpace):
-            if len(self) > len(other):
-                result = ProbabilitySpace(self._probabilities)
-                for probability, event in other:
-                    result.add(probability, event)
-            else:
-                result = ProbabilitySpace(other._probabilities)
-                for probability, event in self:
-                    result.add(probability, event)
+            result = ProbabilitySpace(self._probabilities.copy())
+            for probability, event in other:
+                result.add(probability, event)
         else:
             result = ProbabilitySpace()
             for probability, event in self:
                 result.add(probability, event + other)
         return result
 
-    @profile
     def __radd__(self, other: Any) -> Self:
-        result = ProbabilitySpace()
-        if isinstance(other, ProbabilitySpace):
-            for probability, event in self:
-                result.add(probability, event)
-            for probability, event in other:
-                result.add(probability, event)
-        else:
-            for probability, event in self:
-                result.add(probability, other + event)
-        return result
+        return self.__add__(other)
 
     def __sub__(self, other: Any) -> Self:
         result = ProbabilitySpace()
@@ -115,14 +119,14 @@ class ProbabilitySpace:
             result.add(probability, other / event)
         return result
 
+    @profile
     def __pow__(self, other: Any) -> Self:
         """
         Multiply each probability in the ProbabilitySpace by other:
             ex. space ** 0.5 -> multiply each probability in `space` by 0.5
         """
         result = ProbabilitySpace()
-        for probability, event in self:
-            result.add(probability * other, event)
+        result._probabilities = {event: probability * other for probability, event in self}
         return result
 
     def __rpow__(self, other: Any) -> Self:
@@ -134,37 +138,3 @@ class ProbabilitySpace:
         for probability, event in self:
             result.add(other * probability, event)
         return result
-
-
-        from typing import Any, Self
-
-
-# class ProbabilitySpace:
-
-#     def __init__(self, probabilities: dict[Any, float] = {}):
-#         self._probabilities = probabilities
-
-#     def normalize(self, value: float = 1.0):
-#         total_probability = sum(self._probabilities.values())
-#         self._probabilities = {event: probability / total_probability * value for probability, event in self}
-
-#     # @profile
-#     def __add__(self, other: Any) -> Self:
-#         if isinstance(other, ProbabilitySpace):
-#             if len(self) > len(other):
-#                 # TODO: verify result is not different with deepcopy
-#                 result = ProbabilitySpace(self._probabilities.copy())
-#                 for probability, event in other:
-#                     result.add(probability, event)
-#             else:
-#                 result = ProbabilitySpace(other._probabilities.copy())
-#                 for probability, event in self:
-#                     result.add(probability, event)
-#         else:
-#             result = ProbabilitySpace()
-#             for probability, event in self:
-#                 result.add(probability, event + other)
-#         return result
-
-#     def __radd__(self, other: Any) -> Self:
-#         return self.__add__(other)

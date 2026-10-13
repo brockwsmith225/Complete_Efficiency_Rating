@@ -39,7 +39,7 @@ class Play(_Play):
     # Other
     _PENALTY_PLAY_TYPES = ["Penalty"]
     _TIMEOUT_PLAY_TYPES = ["Timeout"]
-    _ADMIN_PLAY_TYPES = ["Penalty", "Timeout", "Start of Period", "End Period", "End of Half", "End of Regulation", "End of Game"]
+    _ADMIN_PLAY_TYPES = ["Timeout", "Start of Period", "End Period", "End of Half", "End of Regulation", "End of Game"]
     _OTHER_PLAY_TYPES = ["placeholder", "Uncategorized"]
 
     __KNOWN_PLAY_TYPES = set(
