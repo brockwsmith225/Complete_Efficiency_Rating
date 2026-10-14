@@ -77,9 +77,12 @@ class ExpectedPointsAddedRatingSystem(RatingSystem):
 
             if self.competitive_bias:
                 # TODO: do I care about time left in the game?
+                # 2 score game is always competitive, that increases by number of quarters left
+                #     (4th quarter = 2 scores, 3rd quarter = 3 scores, etc.)
+                # competitiveness reduces for each score after the limit
                 biases = [
                     (1 - self.competitive_bias / 100) **
-                    max(math.ceil(abs(p.offense_score - p.defense_score) / 8) - 1, 0)
+                    max(math.ceil(abs(p.offense_score - p.defense_score) / 8) - (5 - p.period) - 1, 0)
                     for p in plays
                 ]
                 return float(np.average(epas, weights=biases))
